@@ -20,6 +20,12 @@ const routes = [
     meta: { title: '人物列表' }
   },
   {
+    path: '/compare',
+    name: 'Compare',
+    component: () => import('@/views/CompareView.vue'),
+    meta: { title: '人脉对比' }
+  },
+  {
     path: '/about',
     name: 'About',
     component: () => import('@/views/AboutView.vue'),

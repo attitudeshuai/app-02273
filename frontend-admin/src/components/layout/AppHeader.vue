@@ -39,6 +39,7 @@ const menuItems = [
   { name: '首页', path: '/', icon: 'HomeFilled' },
   { name: '时间线', path: '/timeline', icon: 'Timer' },
   { name: '人物列表', path: '/persons', icon: 'User' },
+  { name: '人脉对比', path: '/compare', icon: 'Histogram' },
   { name: '关于', path: '/about', icon: 'InfoFilled' }
 ]
 </script>
