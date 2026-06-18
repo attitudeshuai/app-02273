@@ -45,6 +45,44 @@
         <el-option label="按姓名" value="name" />
         <el-option label="按出生年份" value="birth" />
       </el-select>
+
+      <div class="filter-actions">
+        <el-button 
+          :type="networkStore.compareMode ? 'success' : 'primary'" 
+          :icon="networkStore.compareMode ? 'Close' : 'ScaleToOriginal'"
+          @click="toggleCompareMode"
+        >
+          {{ networkStore.compareMode ? '退出对比' : '人脉对比' }}
+        </el-button>
+      </div>
+    </div>
+
+    <!-- 对比模式提示栏 -->
+    <div v-if="networkStore.compareMode" class="compare-bar">
+      <div class="compare-info">
+        <el-icon><ScaleToOriginal /></el-icon>
+        <span>对比模式：请选择两位人物进行对比</span>
+        <el-tag v-if="networkStore.comparePersons.length > 0" type="success" effect="dark">
+          已选 {{ networkStore.comparePersons.length }} / 2
+        </el-tag>
+      </div>
+      <div class="compare-actions">
+        <el-button 
+          v-if="networkStore.comparePersons.length === 2" 
+          type="success" 
+          icon="View"
+          @click="showCompareDialog = true"
+        >
+          查看对比结果
+        </el-button>
+        <el-button 
+          v-if="networkStore.comparePersons.length > 0" 
+          icon="RefreshLeft"
+          @click="networkStore.clearCompare()"
+        >
+          清空选择
+        </el-button>
+      </div>
     </div>
 
     <!-- 人物卡片列表 -->
@@ -53,8 +91,12 @@
         v-for="person in displayPersons" 
         :key="person.id"
         class="person-card"
-        :class="{ center: person.id === 'sushi' }"
-        @click="showPersonDetail(person)"
+        :class="{ 
+          center: person.id === 'sushi',
+          'compare-selected': networkStore.isInCompare(person.id),
+          'compare-disabled': networkStore.compareMode && networkStore.comparePersons.length >= 2 && !networkStore.isInCompare(person.id)
+        }"
+        @click="handleCardClick(person)"
       >
         <div class="card-header">
           <el-tag 
@@ -65,6 +107,9 @@
           >
             {{ getCategoryName(person.category) }}
           </el-tag>
+          <div v-if="networkStore.compareMode && networkStore.isInCompare(person.id)" class="compare-badge">
+            <el-icon><Check /></el-icon>
+          </div>
         </div>
 
         <div class="card-body">
@@ -84,9 +129,15 @@
             <el-icon><Connection /></el-icon>
             <span>{{ getRelationCount(person.id) }} 条关系</span>
           </div>
-          <el-button type="primary" link size="small">
+          <el-button type="primary" link size="small" v-if="!networkStore.compareMode">
             查看详情 <el-icon><ArrowRight /></el-icon>
           </el-button>
+          <el-tag v-else-if="networkStore.isInCompare(person.id)" type="success" effect="dark" size="small">
+            已选择
+          </el-tag>
+          <el-tag v-else type="info" effect="plain" size="small">
+            点击选择
+          </el-tag>
         </div>
       </div>
     </div>
@@ -111,15 +162,32 @@
         @select-person="handleSelectPerson"
       />
     </el-dialog>
+
+    <!-- 人脉对比弹窗 -->
+    <el-dialog
+      v-model="showCompareDialog"
+      title="人脉关系对比"
+      width="900px"
+      class="compare-dialog"
+      @close="handleCompareClose"
+    >
+      <PersonCompare 
+        :person1="networkStore.comparePersons[0]"
+        :person2="networkStore.comparePersons[1]"
+        @select-person="handleCompareSelectPerson"
+      />
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { User, Connection, ArrowRight } from '@element-plus/icons-vue'
+import { User, Connection, ArrowRight, ScaleToOriginal, Check, RefreshLeft, View, Close } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { useNetworkStore } from '@/stores/network'
 import PersonDetail from '@/components/network/PersonDetail.vue'
+import PersonCompare from '@/components/network/PersonCompare.vue'
 
 const route = useRoute()
 const networkStore = useNetworkStore()
@@ -130,6 +198,7 @@ const relationTypeFilter = ref('')
 const sortBy = ref('default')
 const detailVisible = ref(false)
 const selectedPerson = ref(null)
+const showCompareDialog = ref(false)
 
 const categories = [
   { id: 'center', name: '中心人物', color: '#8B4513' },
@@ -241,6 +310,37 @@ const showPersonDetail = (person) => {
 const handleSelectPerson = (person) => {
   selectedPerson.value = person
 }
+
+const toggleCompareMode = () => {
+  networkStore.toggleCompareMode()
+  showCompareDialog.value = false
+}
+
+const handleCardClick = (person) => {
+  if (networkStore.compareMode) {
+    if (networkStore.isInCompare(person.id)) {
+      networkStore.removeFromCompare(person.id)
+    } else if (networkStore.comparePersons.length < 2) {
+      networkStore.addToCompare(person)
+      if (networkStore.comparePersons.length === 2) {
+        ElMessage.success('已选择两位人物，点击"查看对比结果"查看详情')
+      }
+    } else {
+      ElMessage.warning('最多只能选择两位人物进行对比')
+    }
+  } else {
+    showPersonDetail(person)
+  }
+}
+
+const handleCompareClose = () => {
+  showCompareDialog.value = false
+}
+
+const handleCompareSelectPerson = (person) => {
+  showCompareDialog.value = false
+  showPersonDetail(person)
+}
 </script>
 
 <style lang="scss" scoped>
@@ -279,6 +379,7 @@ const handleSelectPerson = (person) => {
   border-radius: $radius-lg;
   box-shadow: $shadow-sm;
   flex-wrap: wrap;
+  align-items: center;
 
   .search-input {
     width: 300px;
@@ -287,6 +388,38 @@ const handleSelectPerson = (person) => {
   .category-select,
   .sort-select {
     width: 150px;
+  }
+
+  .filter-actions {
+    margin-left: auto;
+  }
+}
+
+.compare-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-md $spacing-lg;
+  background: linear-gradient(135deg, rgba(46, 204, 113, 0.1), rgba(26, 188, 156, 0.1));
+  border: 1px solid rgba(46, 204, 113, 0.3);
+  border-radius: $radius-lg;
+
+  .compare-info {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    color: $text-primary;
+    font-size: $font-size-md;
+
+    .el-icon {
+      color: $success-color;
+      font-size: 18px;
+    }
+  }
+
+  .compare-actions {
+    display: flex;
+    gap: $spacing-sm;
   }
 }
 
@@ -301,11 +434,12 @@ const handleSelectPerson = (person) => {
   border-radius: $radius-lg;
   padding: $spacing-lg;
   box-shadow: $shadow-md;
-  border: 1px solid $border-light;
+  border: 2px solid $border-light;
   cursor: pointer;
   transition: all $transition-fast;
   display: flex;
   flex-direction: column;
+  position: relative;
 
   &:hover {
     transform: translateY(-4px);
@@ -313,17 +447,54 @@ const handleSelectPerson = (person) => {
   }
 
   &.center {
-    border: 2px solid $primary-color;
+    border-color: $primary-color;
     background: linear-gradient(135deg, $bg-light, rgba($primary-color, 0.05));
+  }
+
+  &.compare-selected {
+    border-color: $success-color;
+    background: linear-gradient(135deg, $bg-light, rgba($success-color, 0.08));
+    box-shadow: 0 4px 12px rgba($success-color, 0.2);
+
+    &:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 6px 20px rgba($success-color, 0.3);
+    }
+  }
+
+  &.compare-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+
+    &:hover {
+      transform: none;
+      box-shadow: $shadow-md;
+    }
   }
 
   .card-header {
     display: flex;
     align-items: flex-start;
-    justify-content: flex-end;
+    justify-content: space-between;
 
     .category-tag {
       border: none;
+    }
+
+    .compare-badge {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: $success-color;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba($success-color, 0.4);
+
+      .el-icon {
+        font-size: 14px;
+      }
     }
   }
 
@@ -384,6 +555,16 @@ const handleSelectPerson = (person) => {
 .person-dialog {
   :deep(.el-dialog__header) {
     font-family: $font-family-title;
+  }
+}
+
+.compare-dialog {
+  :deep(.el-dialog__header) {
+    font-family: $font-family-title;
+  }
+
+  :deep(.el-dialog__body) {
+    padding-top: 0;
   }
 }
 
