@@ -8,6 +8,7 @@ export const useNetworkStore = defineStore('network', () => {
   const activeFilters = ref([])
   const searchKeyword = ref('')
   const isLoading = ref(false)
+  const comparePersons = ref([])
 
   // 获取所有人物
   const allPersons = computed(() => persons)
@@ -92,12 +93,60 @@ export const useNetworkStore = defineStore('network', () => {
     return persons.find(p => p.id === id)
   }
 
+  function getRelatedPersonsByPersonId(personId) {
+    const relatedIds = new Set()
+    relations
+      .filter(r => r.source === personId || r.target === personId)
+      .forEach(r => {
+        if (r.source === personId) {
+          relatedIds.add(r.target)
+        } else {
+          relatedIds.add(r.source)
+        }
+      })
+    return persons.filter(p => relatedIds.has(p.id))
+  }
+
+  function getRelationsByPersonId(personId) {
+    return relations.filter(r => r.source === personId || r.target === personId)
+  }
+
+  function getCommonPersons(personId1, personId2) {
+    const related1 = getRelatedPersonsByPersonId(personId1)
+    const related2 = getRelatedPersonsByPersonId(personId2)
+    const relatedIds1 = new Set(related1.map(p => p.id))
+    return related2.filter(p => relatedIds1.has(p.id))
+  }
+
+  function addToCompare(person) {
+    if (comparePersons.value.length >= 2) return false
+    if (comparePersons.value.find(p => p.id === person.id)) return false
+    comparePersons.value.push(person)
+    return true
+  }
+
+  function removeFromCompare(personId) {
+    const index = comparePersons.value.findIndex(p => p.id === personId)
+    if (index > -1) {
+      comparePersons.value.splice(index, 1)
+    }
+  }
+
+  function clearCompare() {
+    comparePersons.value = []
+  }
+
+  function isInCompare(personId) {
+    return comparePersons.value.some(p => p.id === personId)
+  }
+
   return {
     // 状态
     selectedPerson,
     activeFilters,
     searchKeyword,
     isLoading,
+    comparePersons,
     // 计算属性
     allPersons,
     allRelations,
@@ -112,6 +161,13 @@ export const useNetworkStore = defineStore('network', () => {
     setFilters,
     toggleFilter,
     setSearchKeyword,
-    getPersonById
+    getPersonById,
+    getRelatedPersonsByPersonId,
+    getRelationsByPersonId,
+    getCommonPersons,
+    addToCompare,
+    removeFromCompare,
+    clearCompare,
+    isInCompare
   }
 })

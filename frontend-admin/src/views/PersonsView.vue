@@ -45,6 +45,28 @@
         <el-option label="按姓名" value="name" />
         <el-option label="按出生年份" value="birth" />
       </el-select>
+
+      <div class="compare-bar" v-if="networkStore.comparePersons.length > 0">
+        <span class="compare-count">
+          已选 {{ networkStore.comparePersons.length }}/2 人
+        </span>
+        <el-button 
+          type="primary" 
+          size="small" 
+          :disabled="networkStore.comparePersons.length < 2"
+          @click="goToCompare"
+        >
+          <el-icon><Histogram /></el-icon>
+          开始对比
+        </el-button>
+        <el-button 
+          size="small" 
+          link
+          @click="clearCompare"
+        >
+          清空
+        </el-button>
+      </div>
     </div>
 
     <!-- 人物卡片列表 -->
@@ -53,7 +75,10 @@
         v-for="person in displayPersons" 
         :key="person.id"
         class="person-card"
-        :class="{ center: person.id === 'sushi' }"
+        :class="{ 
+          center: person.id === 'sushi',
+          'in-compare': networkStore.isInCompare(person.id) 
+        }"
         @click="showPersonDetail(person)"
       >
         <div class="card-header">
@@ -65,6 +90,27 @@
           >
             {{ getCategoryName(person.category) }}
           </el-tag>
+          <el-button 
+            v-if="networkStore.isInCompare(person.id)"
+            type="success"
+            size="small"
+            text
+            @click.stop="removeFromCompare(person.id)"
+          >
+            <el-icon><CircleCheck /></el-icon>
+            已加入对比
+          </el-button>
+          <el-button 
+            v-else
+            type="primary"
+            size="small"
+            text
+            :disabled="networkStore.comparePersons.length >= 2"
+            @click.stop="addToCompare(person)"
+          >
+            <el-icon><Plus /></el-icon>
+            加入对比
+          </el-button>
         </div>
 
         <div class="card-body">
@@ -116,12 +162,14 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import { User, Connection, ArrowRight } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { User, Connection, ArrowRight, Plus, CircleCheck, Histogram } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { useNetworkStore } from '@/stores/network'
 import PersonDetail from '@/components/network/PersonDetail.vue'
 
 const route = useRoute()
+const router = useRouter()
 const networkStore = useNetworkStore()
 
 const searchKeyword = ref('')
@@ -241,6 +289,30 @@ const showPersonDetail = (person) => {
 const handleSelectPerson = (person) => {
   selectedPerson.value = person
 }
+
+const addToCompare = (person) => {
+  const success = networkStore.addToCompare(person)
+  if (success) {
+    ElMessage.success(`已将 ${person.name} 加入对比`)
+  } else {
+    ElMessage.warning('最多只能选择2人进行对比')
+  }
+}
+
+const removeFromCompare = (personId) => {
+  const person = networkStore.getPersonById(personId)
+  networkStore.removeFromCompare(personId)
+  ElMessage.info(`已将 ${person?.name} 移出对比`)
+}
+
+const clearCompare = () => {
+  networkStore.clearCompare()
+  ElMessage.info('已清空对比选择')
+}
+
+const goToCompare = () => {
+  router.push('/compare')
+}
 </script>
 
 <style lang="scss" scoped>
@@ -279,6 +351,7 @@ const handleSelectPerson = (person) => {
   border-radius: $radius-lg;
   box-shadow: $shadow-sm;
   flex-wrap: wrap;
+  align-items: center;
 
   .search-input {
     width: 300px;
@@ -287,6 +360,23 @@ const handleSelectPerson = (person) => {
   .category-select,
   .sort-select {
     width: 150px;
+  }
+}
+
+.compare-bar {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  margin-left: auto;
+  padding: $spacing-xs $spacing-md;
+  background: rgba($primary-color, 0.1);
+  border-radius: $radius-md;
+  border: 1px solid rgba($primary-color, 0.2);
+
+  .compare-count {
+    font-size: $font-size-sm;
+    color: $primary-color;
+    font-weight: 500;
   }
 }
 
@@ -306,6 +396,7 @@ const handleSelectPerson = (person) => {
   transition: all $transition-fast;
   display: flex;
   flex-direction: column;
+  position: relative;
 
   &:hover {
     transform: translateY(-4px);
@@ -317,13 +408,37 @@ const handleSelectPerson = (person) => {
     background: linear-gradient(135deg, $bg-light, rgba($primary-color, 0.05));
   }
 
+  &.in-compare {
+    border: 2px solid #2ECC71;
+    background: linear-gradient(135deg, $bg-light, rgba(#2ECC71, 0.05));
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 0;
+      height: 0;
+      border-style: solid;
+      border-width: 0 40px 40px 0;
+      border-color: transparent #2ECC71 transparent transparent;
+      border-radius: 0 $radius-lg 0 0;
+    }
+  }
+
   .card-header {
     display: flex;
-    align-items: flex-start;
-    justify-content: flex-end;
+    align-items: center;
+    justify-content: space-between;
+    gap: $spacing-sm;
 
     .category-tag {
       border: none;
+      flex-shrink: 0;
+    }
+
+    .el-button {
+      margin-left: auto;
     }
   }
 
