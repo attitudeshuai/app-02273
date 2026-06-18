@@ -8,6 +8,42 @@ export const useNetworkStore = defineStore('network', () => {
   const activeFilters = ref([])
   const searchKeyword = ref('')
   const isLoading = ref(false)
+  const compareMode = ref(false)
+  const comparePersons = ref([])
+
+  // 获取某个人的关系
+  const getRelationsForPerson = (personId) => {
+    return relations.filter(r =>
+      r.source === personId || r.target === personId
+    )
+  }
+
+  // 获取某个人的相关人物
+  const getRelatedPersons = (personId) => {
+    const rels = getRelationsForPerson(personId)
+    const relatedIds = new Set()
+    rels.forEach(r => {
+      if (r.source === personId) {
+        relatedIds.add(r.target)
+      } else {
+        relatedIds.add(r.source)
+      }
+    })
+    return persons.filter(p => relatedIds.has(p.id))
+  }
+
+  // 获取两个人的共同认识的人
+  const commonPersons = computed(() => {
+    if (comparePersons.value.length !== 2) return []
+    const [p1, p2] = comparePersons.value
+    const related1 = new Set(getRelatedPersons(p1.id).map(p => p.id))
+    const related2 = new Set(getRelatedPersons(p2.id).map(p => p.id))
+    const commonIds = [...related1].filter(id => related2.has(id))
+    return persons.filter(p => commonIds.includes(p.id))
+  })
+
+  // 比较模式下的状态
+  const canCompare = computed(() => comparePersons.value.length === 2)
 
   // 获取所有人物
   const allPersons = computed(() => persons)
@@ -92,12 +128,45 @@ export const useNetworkStore = defineStore('network', () => {
     return persons.find(p => p.id === id)
   }
 
+  function toggleComparePerson(person) {
+    const index = comparePersons.value.findIndex(p => p.id === person.id)
+    if (index > -1) {
+      comparePersons.value.splice(index, 1)
+    } else if (comparePersons.value.length < 2) {
+      comparePersons.value.push(person)
+    }
+  }
+
+  function isPersonInCompare(personId) {
+    return comparePersons.value.some(p => p.id === personId)
+  }
+
+  function clearCompare() {
+    comparePersons.value = []
+  }
+
+  function setCompareMode(value) {
+    compareMode.value = value
+    if (!value) {
+      clearCompare()
+    }
+  }
+
+  function getRelationBetween(personId1, personId2) {
+    return relations.find(r =>
+      (r.source === personId1 && r.target === personId2) ||
+      (r.source === personId2 && r.target === personId1)
+    )
+  }
+
   return {
     // 状态
     selectedPerson,
     activeFilters,
     searchKeyword,
     isLoading,
+    compareMode,
+    comparePersons,
     // 计算属性
     allPersons,
     allRelations,
@@ -106,12 +175,21 @@ export const useNetworkStore = defineStore('network', () => {
     filteredPersons,
     relatedRelations,
     relatedPersons,
+    commonPersons,
+    canCompare,
     // 操作
     selectPerson,
     clearSelection,
     setFilters,
     toggleFilter,
     setSearchKeyword,
-    getPersonById
+    getPersonById,
+    getRelationsForPerson,
+    getRelatedPersons,
+    toggleComparePerson,
+    isPersonInCompare,
+    clearCompare,
+    setCompareMode,
+    getRelationBetween
   }
 })
