@@ -1,13 +1,53 @@
 <template>
   <div class="persons-view">
     <div class="view-header">
-      <h1 class="view-title">
-        <el-icon><User /></el-icon>
-        人物列表
-      </h1>
-      <p class="view-subtitle">
-        苏轼社交网络中的 {{ networkStore.allPersons.length }} 位历史人物
-      </p>
+      <div class="header-left">
+        <h1 class="view-title">
+          <el-icon><User /></el-icon>
+          人物列表
+        </h1>
+        <p class="view-subtitle">
+          苏轼社交网络中的 {{ networkStore.allPersons.length }} 位历史人物
+        </p>
+      </div>
+      <div class="header-right">
+        <el-button 
+        :type="networkStore.compareMode ? 'primary' : 'default'"
+        @click="toggleCompareMode"
+      >
+        <el-icon><CopyDocument /></el-icon>
+        {{ networkStore.compareMode ? '退出对比' : '人物对比' }}
+      </el-button>
+      </div>
+    </div>
+
+    <div class="compare-hint" v-if="networkStore.compareMode">
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+      >
+        <template #default>
+          {{ compareHintText }}
+          <el-button
+            v-if="networkStore.comparePersons.length === 2"
+            type="primary"
+            size="small"
+            style="margin-left: 12px"
+            @click="openCompareDialog"
+          >
+            开始对比
+          </el-button>
+          <el-button
+            v-if="networkStore.comparePersons.length > 0"
+            size="small"
+            style="margin-left: 8px"
+            @click="networkStore.clearCompare()"
+          >
+            清空选择
+          </el-button>
+        </template>
+      </el-alert>
     </div>
 
     <!-- 搜索和筛选 -->
@@ -53,10 +93,21 @@
         v-for="person in displayPersons" 
         :key="person.id"
         class="person-card"
-        :class="{ center: person.id === 'sushi' }"
-        @click="showPersonDetail(person)"
+        :class="{ 
+          center: person.id === 'sushi',
+          'compare-selected': networkStore.isPersonInCompare(person.id)
+        }"
+        @click="handleCardClick(person)"
       >
-        <div class="card-header">
+        <div class="card-header" v-if="networkStore.compareMode">
+          <el-checkbox 
+          :model-value="networkStore.isPersonInCompare(person.id)"
+          :disabled="!networkStore.isPersonInCompare(person.id) && networkStore.comparePersons.length >= 2"
+          @click.stop
+          @change="() => networkStore.toggleComparePerson(person)"
+        />
+        </div>
+        <div class="card-header" v-else>
           <el-tag 
             :color="getCategoryColor(person.category)" 
             effect="dark" 
@@ -111,15 +162,31 @@
         @select-person="handleSelectPerson"
       />
     </el-dialog>
+
+    <!-- 人物对比弹窗 -->
+    <el-dialog
+      v-model="compareVisible"
+      title="人脉关系对比"
+      width="1000px"
+      class="compare-dialog"
+    >
+      <PersonCompare 
+        v-if="networkStore.comparePersons.length === 2"
+        :person1="networkStore.comparePersons[0]"
+        :person2="networkStore.comparePersons[1]"
+        @select-person="handleCompareSelectPerson"
+      />
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { User, Connection, ArrowRight } from '@element-plus/icons-vue'
+import { User, Connection, ArrowRight, CopyDocument } from '@element-plus/icons-vue'
 import { useNetworkStore } from '@/stores/network'
 import PersonDetail from '@/components/network/PersonDetail.vue'
+import PersonCompare from '@/components/network/PersonCompare.vue'
 
 const route = useRoute()
 const networkStore = useNetworkStore()
@@ -130,6 +197,7 @@ const relationTypeFilter = ref('')
 const sortBy = ref('default')
 const detailVisible = ref(false)
 const selectedPerson = ref(null)
+const compareVisible = ref(false)
 
 const categories = [
   { id: 'center', name: '中心人物', color: '#8B4513' },
@@ -241,6 +309,34 @@ const showPersonDetail = (person) => {
 const handleSelectPerson = (person) => {
   selectedPerson.value = person
 }
+
+const compareHintText = computed(() => {
+  const count = networkStore.comparePersons.length
+  if (count === 0) return '请选择两个人物进行对比（已选 0/2）'
+  if (count === 1) return `已选择 ${networkStore.comparePersons[0].name}，请再选择一人（已选 1/2）`
+  return `已选择 ${networkStore.comparePersons[0].name} 和 ${networkStore.comparePersons[1].name}（已选 2/2）`
+})
+
+const toggleCompareMode = () => {
+  networkStore.setCompareMode(!networkStore.compareMode)
+}
+
+const handleCardClick = (person) => {
+  if (networkStore.compareMode) {
+    networkStore.toggleComparePerson(person)
+  } else {
+    showPersonDetail(person)
+  }
+}
+
+const openCompareDialog = () => {
+  compareVisible.value = true
+}
+
+const handleCompareSelectPerson = (person) => {
+  compareVisible.value = false
+  showPersonDetail(person)
+}
 </script>
 
 <style lang="scss" scoped>
@@ -251,6 +347,19 @@ const handleSelectPerson = (person) => {
 }
 
 .view-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $spacing-md;
+
+  .header-left {
+    flex: 1;
+  }
+
+  .header-right {
+    flex-shrink: 0;
+  }
+
   .view-title {
     display: flex;
     align-items: center;
@@ -269,6 +378,10 @@ const handleSelectPerson = (person) => {
     color: $text-muted;
     font-size: $font-size-sm;
   }
+}
+
+.compare-hint {
+  margin-bottom: 0;
 }
 
 .filter-bar {
@@ -315,6 +428,12 @@ const handleSelectPerson = (person) => {
   &.center {
     border: 2px solid $primary-color;
     background: linear-gradient(135deg, $bg-light, rgba($primary-color, 0.05));
+  }
+
+  &.compare-selected {
+    border: 2px solid #F39C12;
+    background: linear-gradient(135deg, $bg-light, rgba(243, 156, 18, 0.08));
+    box-shadow: 0 4px 12px rgba(243, 156, 18, 0.2);
   }
 
   .card-header {
@@ -387,7 +506,22 @@ const handleSelectPerson = (person) => {
   }
 }
 
+.compare-dialog {
+  :deep(.el-dialog__header) {
+    font-family: $font-family-title;
+  }
+
+  :deep(.el-dialog__body) {
+    padding-top: $spacing-md;
+  }
+}
+
 @media (max-width: 768px) {
+  .view-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .filter-bar {
     flex-direction: column;
 
