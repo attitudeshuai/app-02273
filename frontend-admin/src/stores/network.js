@@ -8,6 +8,7 @@ export const useNetworkStore = defineStore('network', () => {
   const activeFilters = ref([])
   const searchKeyword = ref('')
   const isLoading = ref(false)
+  const comparePersonIds = ref([])
 
   // 获取所有人物
   const allPersons = computed(() => persons)
@@ -62,6 +63,53 @@ export const useNetworkStore = defineStore('network', () => {
     return persons.filter(p => relatedIds.has(p.id))
   })
 
+  // 获取关系类型颜色
+  function getRelationColor(type) {
+    const relation = relationTypes.find(r => r.id === type)
+    return relation ? relation.color : '#999'
+  }
+
+  // 获取某人物的所有相关人物（带关系信息）
+  function getRelatedPersonsOf(personId) {
+    const rels = relations.filter(r =>
+      r.source === personId || r.target === personId
+    )
+    return rels.map(r => {
+      const otherId = r.source === personId ? r.target : r.source
+      const person = persons.find(p => p.id === otherId)
+      return {
+        person,
+        label: r.label,
+        type: r.type,
+        color: getRelationColor(r.type)
+      }
+    }).filter(r => r.person)
+  }
+
+  // 人脉对比数据：并排展示两人人脉，并标出共同认识的人
+  const compareData = computed(() => {
+    if (comparePersonIds.value.length !== 2) return null
+    const [id1, id2] = comparePersonIds.value
+    const person1 = persons.find(p => p.id === id1)
+    const person2 = persons.find(p => p.id === id2)
+    if (!person1 || !person2) return null
+
+    const related1 = getRelatedPersonsOf(id1)
+    const related2 = getRelatedPersonsOf(id2)
+    const ids1 = new Set(related1.map(r => r.person.id))
+    const ids2 = new Set(related2.map(r => r.person.id))
+    const commonIds = [...ids1].filter(id => ids2.has(id))
+
+    return {
+      person1,
+      person2,
+      related1: related1.map(r => ({ ...r, isCommon: commonIds.includes(r.person.id) })),
+      related2: related2.map(r => ({ ...r, isCommon: commonIds.includes(r.person.id) })),
+      commonPersons: commonIds.map(id => persons.find(p => p.id === id)).filter(Boolean),
+      commonCount: commonIds.length
+    }
+  })
+
   // 操作
   function selectPerson(person) {
     selectedPerson.value = person
@@ -88,6 +136,14 @@ export const useNetworkStore = defineStore('network', () => {
     searchKeyword.value = keyword
   }
 
+  function setComparePersons(ids) {
+    comparePersonIds.value = ids.filter(Boolean)
+  }
+
+  function clearCompare() {
+    comparePersonIds.value = []
+  }
+
   function getPersonById(id) {
     return persons.find(p => p.id === id)
   }
@@ -98,6 +154,7 @@ export const useNetworkStore = defineStore('network', () => {
     activeFilters,
     searchKeyword,
     isLoading,
+    comparePersonIds,
     // 计算属性
     allPersons,
     allRelations,
@@ -106,12 +163,17 @@ export const useNetworkStore = defineStore('network', () => {
     filteredPersons,
     relatedRelations,
     relatedPersons,
+    compareData,
     // 操作
     selectPerson,
     clearSelection,
     setFilters,
     toggleFilter,
     setSearchKeyword,
-    getPersonById
+    getPersonById,
+    getRelationColor,
+    getRelatedPersonsOf,
+    setComparePersons,
+    clearCompare
   }
 })
