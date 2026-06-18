@@ -8,6 +8,8 @@ export const useNetworkStore = defineStore('network', () => {
   const activeFilters = ref([])
   const searchKeyword = ref('')
   const isLoading = ref(false)
+  const comparePersons = ref([])
+  const compareMode = ref(false)
 
   // 获取所有人物
   const allPersons = computed(() => persons)
@@ -62,6 +64,39 @@ export const useNetworkStore = defineStore('network', () => {
     return persons.filter(p => relatedIds.has(p.id))
   })
 
+  // 获取指定人物的相关人物
+  const getRelatedPersonsByPerson = (person) => {
+    if (!person) return []
+    const personRelations = relations.filter(r => 
+      r.source === person.id || r.target === person.id
+    )
+    return personRelations.map(r => {
+      const otherId = r.source === person.id ? r.target : r.source
+      const otherPerson = persons.find(p => p.id === otherId)
+      return {
+        person: otherPerson,
+        relation: r,
+        label: r.label,
+        color: getRelationColor(r.type)
+      }
+    }).filter(r => r.person)
+  }
+
+  const getRelationColor = (type) => {
+    const relation = relationTypes.find(r => r.id === type)
+    return relation ? relation.color : '#999'
+  }
+
+  // 对比模式下的共同好友
+  const commonFriends = computed(() => {
+    if (comparePersons.value.length < 2) return []
+    const [p1, p2] = comparePersons.value
+    const p1Relations = getRelatedPersonsByPerson(p1)
+    const p2Relations = getRelatedPersonsByPerson(p2)
+    const p2Ids = new Set(p2Relations.map(r => r.person.id))
+    return p1Relations.filter(r => p2Ids.has(r.person.id))
+  })
+
   // 操作
   function selectPerson(person) {
     selectedPerson.value = person
@@ -92,12 +127,42 @@ export const useNetworkStore = defineStore('network', () => {
     return persons.find(p => p.id === id)
   }
 
+  function toggleCompareMode() {
+    compareMode.value = !compareMode.value
+    if (!compareMode.value) {
+      comparePersons.value = []
+    }
+  }
+
+  function addToCompare(person) {
+    if (comparePersons.value.length >= 2) return
+    if (comparePersons.value.find(p => p.id === person.id)) return
+    comparePersons.value.push(person)
+  }
+
+  function removeFromCompare(personId) {
+    const index = comparePersons.value.findIndex(p => p.id === personId)
+    if (index > -1) {
+      comparePersons.value.splice(index, 1)
+    }
+  }
+
+  function clearCompare() {
+    comparePersons.value = []
+  }
+
+  function isInCompare(personId) {
+    return comparePersons.value.some(p => p.id === personId)
+  }
+
   return {
     // 状态
     selectedPerson,
     activeFilters,
     searchKeyword,
     isLoading,
+    comparePersons,
+    compareMode,
     // 计算属性
     allPersons,
     allRelations,
@@ -106,12 +171,19 @@ export const useNetworkStore = defineStore('network', () => {
     filteredPersons,
     relatedRelations,
     relatedPersons,
+    commonFriends,
     // 操作
     selectPerson,
     clearSelection,
     setFilters,
     toggleFilter,
     setSearchKeyword,
-    getPersonById
+    getPersonById,
+    toggleCompareMode,
+    addToCompare,
+    removeFromCompare,
+    clearCompare,
+    isInCompare,
+    getRelatedPersonsByPerson
   }
 })
